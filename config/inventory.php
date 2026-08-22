@@ -3,8 +3,10 @@
 return [
     'ollama' => [
         'base_url' => env('OLLAMA_BASE_URL', 'http://127.0.0.1:11434'),
-        'model' => env('OLLAMA_MODEL', 'llama3.2-vision:11b'),
-        'timeout' => (int) env('OLLAMA_TIMEOUT', 120),
+        // 8b-instruct, not :8b — the short tag is the thinking variant.
+        'model' => env('OLLAMA_MODEL', 'qwen3-vl:8b-instruct'),
+        'timeout' => (int) env('OLLAMA_TIMEOUT', 180),
+        'num_ctx' => (int) env('OLLAMA_NUM_CTX', 4096),
     ],
 
     'gemini' => [

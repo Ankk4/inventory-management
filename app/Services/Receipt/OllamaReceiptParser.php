@@ -30,12 +30,18 @@ class OllamaReceiptParser implements ReceiptParserInterface
             ->post("{$baseUrl}/api/chat", [
                 'model' => $model,
                 'stream' => false,
+                'format' => 'json',
+                'think' => false,
                 'messages' => [
                     [
                         'role' => 'user',
                         'content' => $prompt,
                         'images' => [$imageData],
                     ],
+                ],
+                'options' => [
+                    'temperature' => 0,
+                    'num_ctx' => config('inventory.ollama.num_ctx'),
                 ],
             ]);
 
