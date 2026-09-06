@@ -42,7 +42,13 @@ composer run dev
 
 `composer setup` copies `.env` if missing, generates `APP_KEY`, runs migrations, installs npm packages, and builds frontend assets.
 
-Then open [http://localhost:8000](http://localhost:8000), register at `/register`, and go to **Import Receipt**.
+Create a login (no roles — every account is the same):
+
+```bash
+php artisan user:create "Ada Lovelace" ada@example.com
+```
+
+It prompts for a password. Then open [http://localhost:8000](http://localhost:8000), sign in, and go to **Import Receipt**. Self-serve `/register` still works if you want it.
 
 If you skip `composer setup`:
 
@@ -168,6 +174,24 @@ Inventory-specific variables from `.env.example`:
 | `GEMINI_DAILY_LIMIT` | `50` | App-side request cap per day |
 
 Keep secrets in `.env` only. Do not commit API keys.
+
+## Users
+
+There is no admin/normal split. Add and remove accounts from the CLI:
+
+```bash
+php artisan user:create "Ada Lovelace" ada@example.com
+php artisan user:list
+php artisan user:delete ada@example.com
+```
+
+Pass `--password=` to `user:create` to skip the prompt (useful in scripts). Pass `--force` to `user:delete` to skip confirmation. Deleting a user also deletes their receipts.
+
+In Docker:
+
+```bash
+docker compose exec app php artisan user:create "Ada Lovelace" ada@example.com
+```
 
 ## Tests
 
