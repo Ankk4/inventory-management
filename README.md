@@ -2,11 +2,10 @@
 
 Personal inventory app that turns receipt photos into persistent stock, purchase history, and search. Models like Gemini are good at reading a receipt once; this app is the system of record.
 
-Stack: Laravel 13, Breeze (session auth), SQLite. Receipt parsing is optional: paste JSON from the Gemini web UI (zero API cost), local Ollama vision, or the Gemini API.
+Stack: Laravel 13, Breeze (session auth), SQLite.
 
-## Features
+## Features (in progress)
 
-- Register / log in
 - Item list with search, create/edit, and manual stock adjustments
 - Receipt import with a review step (match existing items, create new ones, or skip lines)
 - Receipt archive, including optional stored images
@@ -21,14 +20,14 @@ Review & match (existing item or create new)
         ↓
 Confirm → item quantities + stock_movements + receipts / receipt_lines
 ```
+Data model:
 
-Data model: `categories` → `items` → `stock_movements`, plus `receipts` → `receipt_lines`.
-
-Seeded categories: Dairy, Produce, Pantry, Frozen, Beverages, Household, Electrical. Electrical is a category name only — no SKU, bin, supplier, or datasheet fields yet.
+- `categories` → `items` → `stock_movements`
+- `receipts` → `receipt_lines`
 
 ## Requirements
 
-- PHP 8.3+ (the Docker image uses 8.4)
+- PHP 8.4
 - Composer, Node.js, SQLite
 - Optional: [Ollama](https://ollama.com) with a vision model, or a Gemini API key
 
@@ -58,7 +57,7 @@ composer run dev:wifi
 
 Composer does not accept `composer run dev --wifi` (`--wifi` is treated as a Composer flag). Equivalent: `composer run dev -- --wifi`.
 
-`composer run dev` stays on localhost. `dev:wifi` binds Laravel (`:8000`) and Vite (`:5173`) on `0.0.0.0`, points Vite HMR at this machine's LAN IP, and temporarily allows those two TCP ports from your `/24` in UFW when UFW is active (Omarchy denies incoming by default). Stop the process to remove the UFW rules. Open `http://<lan-ip>:8000` on the phone.
+`composer run dev` stays on localhost. `dev:wifi` binds Laravel (`:8000`) and Vite (`:5173`) on `0.0.0.0`, points Vite HMR at this machine's LAN IP, and temporarily allows those two TCP ports from your `/24` in UFW when UFW is active. Stop the process to remove the UFW rules. Open `http://<lan-ip>:8000` on the phone.
 
 If you skip `composer setup`:
 
@@ -151,7 +150,8 @@ Use the `-instruct` tag. `qwen3-vl:8b` (no suffix) is the slower thinking varian
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=qwen3-vl:8b-instruct
 OLLAMA_TIMEOUT=180
-OLLAMA_NUM_CTX=4096
+OLLAMA_NUM_CTX=8192
+OLLAMA_MAX_IMAGE_EDGE=2048
 ```
 
 ```bash
@@ -159,6 +159,8 @@ ollama pull qwen3-vl:8b-instruct
 ```
 
 Then use **Import Receipt** → **Ollama** and upload an image.
+
+Receipt photos are resized to about `OLLAMA_MAX_IMAGE_EDGE`² pixels before they are sent, so tall receipts keep their width. `4096` context is too small for a typical receipt image plus the JSON reply; `8192` still fits a 10 GB GPU.
 
 If the 8B model OOMs on a smaller GPU, drop to `qwen3-vl:4b-instruct`. Do not pull `qwen3-vl:32b` on a 10 GB card.
 
@@ -185,7 +187,8 @@ Inventory-specific variables from `.env.example`:
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama HTTP API |
 | `OLLAMA_MODEL` | `qwen3-vl:8b-instruct` | Vision model name (`-instruct`, not the thinking tag) |
 | `OLLAMA_TIMEOUT` | `180` | HTTP timeout in seconds (cold start + image) |
-| `OLLAMA_NUM_CTX` | `4096` | Context window; keep modest so a 10 GB GPU stays in VRAM |
+| `OLLAMA_NUM_CTX` | `8192` | Context window; vision images need more than 4096 |
+| `OLLAMA_MAX_IMAGE_EDGE` | `2048` | Square-equivalent pixel budget for Ollama images |
 | `GEMINI_ENABLED` | `false` | Show and allow the Gemini API import tab |
 | `GEMINI_API_KEY` | empty | Google AI Studio key |
 | `GEMINI_MODEL` | `gemini-2.0-flash` | Gemini model id |
@@ -203,7 +206,7 @@ php artisan user:list
 php artisan user:delete ada@example.com
 ```
 
-Pass `--password=` to `user:create` to skip the prompt (useful in scripts). Pass `--force` to `user:delete` to skip confirmation. Deleting a user also deletes their receipts.
+Pass `--password=` to `user:create` to skip the prompt (useful in scripts). Pass `--force` to `user:delete` to skip confirmation. Deleting a user also deletes their inventories, items, and receipts.
 
 In Docker:
 

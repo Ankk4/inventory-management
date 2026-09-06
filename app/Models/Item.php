@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Item extends Model
 {
     protected $fillable = [
+        'inventory_id',
         'category_id',
         'name',
         'normalized_name',
@@ -23,6 +24,11 @@ class Item extends Model
         return [
             'quantity' => 'decimal:3',
         ];
+    }
+
+    public function inventory(): BelongsTo
+    {
+        return $this->belongsTo(Inventory::class);
     }
 
     public function category(): BelongsTo

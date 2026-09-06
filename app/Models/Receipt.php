@@ -10,6 +10,7 @@ class Receipt extends Model
 {
     protected $fillable = [
         'user_id',
+        'inventory_id',
         'store_name',
         'purchased_at',
         'total',
@@ -31,6 +32,11 @@ class Receipt extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function inventory(): BelongsTo
+    {
+        return $this->belongsTo(Inventory::class);
     }
 
     public function lines(): HasMany

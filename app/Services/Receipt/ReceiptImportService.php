@@ -3,13 +3,14 @@
 namespace App\Services\Receipt;
 
 use App\DTO\ReceiptDraft;
+use App\Models\Inventory;
 use App\Models\Item;
 use App\Models\Receipt;
 use App\Models\ReceiptLine;
 use App\Models\StockMovement;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use InvalidArgumentException;
 
 class ReceiptImportService
 {
@@ -21,11 +22,16 @@ class ReceiptImportService
         ];
     }
 
-    public function confirm(User $user, array $payload): Receipt
+    public function confirm(User $user, Inventory $inventory, array $payload): Receipt
     {
-        return DB::transaction(function () use ($user, $payload) {
+        if ($inventory->user_id !== $user->id) {
+            throw new InvalidArgumentException('Inventory does not belong to the authenticated user.');
+        }
+
+        return DB::transaction(function () use ($user, $inventory, $payload) {
             $receipt = Receipt::create([
                 'user_id' => $user->id,
+                'inventory_id' => $inventory->id,
                 'store_name' => $payload['store_name'] ?? null,
                 'purchased_at' => $payload['purchase_date'] ?? null,
                 'total' => $payload['total'] ?? null,
@@ -50,7 +56,7 @@ class ReceiptImportService
                     continue;
                 }
 
-                $item = $this->resolveItem($lineData);
+                $item = $this->resolveItem($inventory, $lineData);
 
                 ReceiptLine::create([
                     'receipt_id' => $receipt->id,
@@ -94,16 +100,26 @@ class ReceiptImportService
         return route('receipts.image', ['path' => $path]);
     }
 
-    private function resolveItem(array $lineData): Item
+    private function resolveItem(Inventory $inventory, array $lineData): Item
     {
         if (! empty($lineData['matched_item_id'])) {
-            return Item::findOrFail($lineData['matched_item_id']);
+            $item = Item::query()
+                ->where('inventory_id', $inventory->id)
+                ->whereKey($lineData['matched_item_id'])
+                ->first();
+
+            if ($item === null) {
+                throw new InvalidArgumentException('Matched item must belong to the selected inventory.');
+            }
+
+            return $item;
         }
 
         if (! empty($lineData['create_item'])) {
             $name = trim($lineData['new_item_name'] ?? $lineData['raw_name']);
 
             return Item::create([
+                'inventory_id' => $inventory->id,
                 'name' => $name,
                 'normalized_name' => Item::normalizeName($name),
                 'quantity' => 0,
@@ -112,6 +128,6 @@ class ReceiptImportService
             ]);
         }
 
-        throw new \InvalidArgumentException('Each line must match an item or create a new one.');
+        throw new InvalidArgumentException('Each line must match an item or create a new one.');
     }
 }

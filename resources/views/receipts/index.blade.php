@@ -1,48 +1,28 @@
-<x-app-layout>
-    <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('Receipt History') }}</h2>
-    </x-slot>
+<x-app-layout :inventory="$inventory" :inventories="$inventories">
+    <div class="space-y-4">
+        <h1 class="text-xl font-semibold tracking-tight">Imports</h1>
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white shadow-sm sm:rounded-lg p-6">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead>
-                        <tr>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Store</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Lines</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200">
-                        @forelse ($receipts as $receipt)
-                            <tr>
-                                <td class="px-4 py-2">
-                                    <a href="{{ route('receipts.show', $receipt) }}" class="text-indigo-600 hover:underline">
-                                        {{ $receipt->store_name ?? 'Unknown store' }}
-                                    </a>
-                                </td>
-                                <td class="px-4 py-2">{{ $receipt->purchased_at?->format('Y-m-d') ?? '—' }}</td>
-                                <td class="px-4 py-2">
-                                    @if ($receipt->total)
-                                        {{ number_format($receipt->total, 2) }} {{ $receipt->currency }}
-                                    @else
-                                        —
-                                    @endif
-                                </td>
-                                <td class="px-4 py-2">{{ $receipt->lines_count }}</td>
-                                <td class="px-4 py-2 text-gray-600">{{ $receipt->parser_source }}</td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="5" class="px-4 py-6 text-center text-gray-500">No receipts imported yet.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
-
-                <div class="mt-4">{{ $receipts->links() }}</div>
-            </div>
+        <div class="space-y-3">
+            @forelse ($receipts as $receipt)
+                <a
+                    href="{{ route('receipts.show', $receipt) }}"
+                    class="flex items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-4"
+                >
+                    <div class="min-w-0">
+                        <p class="truncate font-medium">{{ $receipt->store_name ?? 'Unknown store' }}</p>
+                        <p class="text-sm text-stone-500">{{ $receipt->purchased_at?->format('Y-m-d') ?? $receipt->created_at->format('Y-m-d') }} · {{ $receipt->lines_count }} lines</p>
+                    </div>
+                    <span class="text-xs text-stone-400">{{ $receipt->parser_source }}</span>
+                </a>
+            @empty
+                <div class="rounded-2xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center text-sm text-stone-500">
+                    No imports yet.
+                </div>
+            @endforelse
         </div>
+
+        @if ($receipts->hasPages())
+            <div class="mt-4">{{ $receipts->links() }}</div>
+        @endif
     </div>
 </x-app-layout>

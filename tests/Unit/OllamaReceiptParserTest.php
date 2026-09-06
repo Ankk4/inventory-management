@@ -4,9 +4,11 @@ namespace Tests\Unit;
 
 use App\DTO\ReceiptParseRequest;
 use App\Services\Receipt\OllamaReceiptParser;
+use App\Services\Receipt\ReceiptImageEncoder;
 use App\Services\Receipt\ReceiptPayloadNormalizer;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Tests\TestCase;
 
 class OllamaReceiptParserTest extends TestCase
@@ -17,7 +19,8 @@ class OllamaReceiptParserTest extends TestCase
             'inventory.ollama.base_url' => 'http://127.0.0.1:11434',
             'inventory.ollama.model' => 'qwen3-vl:8b-instruct',
             'inventory.ollama.timeout' => 180,
-            'inventory.ollama.num_ctx' => 4096,
+            'inventory.ollama.num_ctx' => 8192,
+            'inventory.ollama.max_image_edge' => 2048,
         ]);
 
         Http::fake([
@@ -48,7 +51,7 @@ class OllamaReceiptParserTest extends TestCase
             '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGcP//Z'
         ));
         $image = new UploadedFile($imagePath, 'receipt.jpg', 'image/jpeg', null, true);
-        $parser = new OllamaReceiptParser(new ReceiptPayloadNormalizer);
+        $parser = new OllamaReceiptParser(new ReceiptPayloadNormalizer, new ReceiptImageEncoder);
         $draft = $parser->parse(new ReceiptParseRequest(image: $image));
 
         $this->assertSame('ollama', $draft->parserSource);
@@ -64,8 +67,47 @@ class OllamaReceiptParserTest extends TestCase
                 && $payload['format'] === 'json'
                 && $payload['think'] === false
                 && ($payload['options']['temperature'] ?? null) === 0
-                && ($payload['options']['num_ctx'] ?? null) === 4096
+                && ($payload['options']['num_ctx'] ?? null) === 8192
                 && isset($payload['messages'][0]['images'][0]);
         });
+    }
+
+    public function test_explains_context_window_overflow(): void
+    {
+        config([
+            'inventory.ollama.base_url' => 'http://127.0.0.1:11434',
+            'inventory.ollama.model' => 'qwen3-vl:8b-instruct',
+            'inventory.ollama.timeout' => 180,
+            'inventory.ollama.num_ctx' => 8192,
+        ]);
+
+        Http::fake([
+            'http://127.0.0.1:11434/api/chat' => Http::response(
+                [
+                    'error' => json_encode([
+                        'error' => [
+                            'code' => 400,
+                            'message' => 'request (4168 tokens) exceeds the available context size (4096 tokens), try increasing it',
+                            'type' => 'exceed_context_size_error',
+                            'n_prompt_tokens' => 4168,
+                            'n_ctx' => 4096,
+                        ],
+                    ]),
+                ],
+                400,
+            ),
+        ]);
+
+        $imagePath = tempnam(sys_get_temp_dir(), 'receipt');
+        file_put_contents($imagePath, base64_decode(
+            '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGcP//Z'
+        ));
+        $image = new UploadedFile($imagePath, 'receipt.jpg', 'image/jpeg', null, true);
+        $parser = new OllamaReceiptParser(new ReceiptPayloadNormalizer, new ReceiptImageEncoder);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('the image used 4168 tokens but the context window is 4096');
+
+        $parser->parse(new ReceiptParseRequest(image: $image));
     }
 }

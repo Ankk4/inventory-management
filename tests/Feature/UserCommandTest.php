@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\Inventory\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -23,6 +24,10 @@ class UserCommandTest extends TestCase
 
         $this->assertNotNull($user);
         $this->assertTrue(password_verify('password', $user->password));
+        $this->assertDatabaseHas('inventories', [
+            'user_id' => $user->id,
+            'name' => InventoryService::DEFAULT_NAME,
+        ]);
     }
 
     public function test_user_create_command_prompts_when_arguments_are_omitted(): void
@@ -51,7 +56,7 @@ class UserCommandTest extends TestCase
         $this->post('/login', [
             'email' => 'ada@example.com',
             'password' => 'password',
-        ])->assertRedirect(route('dashboard', absolute: false));
+        ])->assertRedirect(route('home', absolute: false));
 
         $this->assertAuthenticated();
     }

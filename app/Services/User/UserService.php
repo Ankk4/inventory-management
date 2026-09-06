@@ -3,6 +3,8 @@
 namespace App\Services\User;
 
 use App\Models\User;
+use App\Services\Inventory\InventoryService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -10,6 +12,8 @@ use Illuminate\Validation\ValidationException;
 
 class UserService
 {
+    public function __construct(private InventoryService $inventories) {}
+
     /**
      * @throws ValidationException
      */
@@ -28,18 +32,22 @@ class UserService
             ],
         )->validate();
 
-        $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => $data['password'],
-        ]);
+        return DB::transaction(function () use ($data, $verified): User {
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => $data['password'],
+            ]);
 
-        if ($verified) {
-            $user->email_verified_at = now();
-            $user->save();
-        }
+            if ($verified) {
+                $user->email_verified_at = now();
+                $user->save();
+            }
 
-        return $user;
+            $this->inventories->createDefault($user);
+
+            return $user;
+        });
     }
 
     public function delete(User $user): void

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
+use App\Models\Inventory;
 use App\Models\Item;
 use App\Models\Receipt;
 use App\Models\User;
@@ -16,6 +17,7 @@ class ReceiptImportTest extends TestCase
     public function test_paste_import_shows_review_page(): void
     {
         $user = User::factory()->create();
+        $inventory = Inventory::create(['user_id' => $user->id, 'name' => 'Pantry']);
 
         $payload = json_encode([
             'store_name' => 'Test Mart',
@@ -33,12 +35,12 @@ class ReceiptImportTest extends TestCase
             ],
         ]);
 
-        $response = $this->actingAs($user)->post(route('import.paste'), [
+        $response = $this->actingAs($user)->post(route('inventories.scan.paste', $inventory), [
             'pasted_text' => $payload,
         ]);
 
         $response->assertOk();
-        $response->assertSee('Review Receipt Import');
+        $response->assertSee('Review import');
         $response->assertSee('Milk 1L');
         $response->assertSee('Test Mart');
     }
@@ -46,9 +48,11 @@ class ReceiptImportTest extends TestCase
     public function test_confirm_import_updates_inventory_and_creates_receipt(): void
     {
         $user = User::factory()->create();
+        $inventory = Inventory::create(['user_id' => $user->id, 'name' => 'Pantry']);
         $category = Category::create(['name' => 'Dairy', 'slug' => 'dairy']);
 
         $existing = Item::create([
+            'inventory_id' => $inventory->id,
             'name' => 'Milk 1L',
             'normalized_name' => 'milk 1l',
             'category_id' => $category->id,
@@ -56,7 +60,7 @@ class ReceiptImportTest extends TestCase
             'unit' => 'pcs',
         ]);
 
-        $response = $this->actingAs($user)->post(route('import.confirm'), [
+        $response = $this->actingAs($user)->post(route('inventories.scan.confirm', $inventory), [
             'store_name' => 'Test Mart',
             'purchase_date' => '2026-06-05',
             'currency' => 'EUR',
@@ -85,7 +89,7 @@ class ReceiptImportTest extends TestCase
             ],
         ]);
 
-        $response->assertRedirect();
+        $response->assertRedirect(route('inventories.show', $inventory));
         $this->assertDatabaseCount('receipts', 1);
 
         $existing->refresh();
@@ -94,9 +98,11 @@ class ReceiptImportTest extends TestCase
         $bread = Item::where('name', 'New Bread')->first();
         $this->assertNotNull($bread);
         $this->assertEquals(1, (float) $bread->quantity);
+        $this->assertEquals($inventory->id, $bread->inventory_id);
 
         $receipt = Receipt::first();
         $this->assertEquals('manual_paste', $receipt->parser_source);
+        $this->assertEquals($inventory->id, $receipt->inventory_id);
         $this->assertEquals(2, $receipt->lines()->count());
         $this->assertEquals(2, $receipt->stockMovements()->count());
     }
