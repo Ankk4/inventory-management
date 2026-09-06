@@ -79,6 +79,90 @@ class InventoryFeatureTest extends TestCase
         $response->assertDontSee('Firewood');
     }
 
+    public function test_stock_page_hides_zero_quantity_items_by_default(): void
+    {
+        $user = User::factory()->create();
+        $inventory = Inventory::create(['user_id' => $user->id, 'name' => 'Pantry']);
+
+        Item::create([
+            'inventory_id' => $inventory->id,
+            'name' => 'Milk',
+            'normalized_name' => 'milk',
+            'quantity' => 1,
+            'unit' => 'pcs',
+        ]);
+
+        Item::create([
+            'inventory_id' => $inventory->id,
+            'name' => 'Flour',
+            'normalized_name' => 'flour',
+            'quantity' => 0,
+            'unit' => 'pcs',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('inventories.show', $inventory));
+
+        $response->assertOk();
+        $response->assertSee('Milk');
+        $response->assertDontSee('Flour');
+        $response->assertSee('Existing items only');
+        $response->assertSee('1 item in stock');
+    }
+
+    public function test_stock_page_shows_zero_quantity_items_when_existing_filter_is_off(): void
+    {
+        $user = User::factory()->create();
+        $inventory = Inventory::create(['user_id' => $user->id, 'name' => 'Pantry']);
+
+        Item::create([
+            'inventory_id' => $inventory->id,
+            'name' => 'Milk',
+            'normalized_name' => 'milk',
+            'quantity' => 1,
+            'unit' => 'pcs',
+        ]);
+
+        Item::create([
+            'inventory_id' => $inventory->id,
+            'name' => 'Flour',
+            'normalized_name' => 'flour',
+            'quantity' => 0,
+            'unit' => 'pcs',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('inventories.show', [
+            'inventory' => $inventory,
+            'existing' => 0,
+        ]));
+
+        $response->assertOk();
+        $response->assertSee('Milk');
+        $response->assertSee('Flour');
+        $response->assertSee('2 items');
+        $response->assertDontSee('in stock');
+    }
+
+    public function test_stock_page_explains_empty_state_when_all_items_are_out_of_stock(): void
+    {
+        $user = User::factory()->create();
+        $inventory = Inventory::create(['user_id' => $user->id, 'name' => 'Pantry']);
+
+        Item::create([
+            'inventory_id' => $inventory->id,
+            'name' => 'Flour',
+            'normalized_name' => 'flour',
+            'quantity' => 0,
+            'unit' => 'pcs',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('inventories.show', $inventory));
+
+        $response->assertOk();
+        $response->assertDontSee('Flour');
+        $response->assertSee('Nothing in stock');
+        $response->assertDontSee('Scan a photo');
+    }
+
     public function test_user_cannot_view_another_users_inventory(): void
     {
         $owner = User::factory()->create();
@@ -88,6 +172,18 @@ class InventoryFeatureTest extends TestCase
         $this->actingAs($other)
             ->get(route('inventories.show', $inventory))
             ->assertNotFound();
+    }
+
+    public function test_scan_photo_input_does_not_force_the_camera(): void
+    {
+        $user = User::factory()->create();
+        $inventory = Inventory::create(['user_id' => $user->id, 'name' => 'Pantry']);
+
+        $response = $this->actingAs($user)->get(route('inventories.scan', $inventory));
+
+        $response->assertOk();
+        $response->assertSee('Take or choose a photo');
+        $this->assertStringNotContainsString('capture=', $response->getContent());
     }
 
     public function test_paste_import_shows_review_page_for_inventory(): void
@@ -226,6 +322,56 @@ class InventoryFeatureTest extends TestCase
         $this->assertEquals(1, (float) $foreignItem->fresh()->quantity);
     }
 
+    public function test_ask_page_shows_provider_and_stock_context(): void
+    {
+        config([
+            'inventory.gemini.enabled' => false,
+            'inventory.ollama.model' => 'qwen3-vl:8b-instruct',
+        ]);
+
+        $user = User::factory()->create();
+        $pantry = Inventory::create(['user_id' => $user->id, 'name' => 'Pantry']);
+
+        Item::create([
+            'inventory_id' => $pantry->id,
+            'name' => 'Eggs',
+            'normalized_name' => 'eggs',
+            'quantity' => 6,
+            'unit' => 'pcs',
+        ]);
+
+        Item::create([
+            'inventory_id' => $pantry->id,
+            'name' => 'Empty Jar',
+            'normalized_name' => 'empty jar',
+            'quantity' => 0,
+            'unit' => 'pcs',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('inventories.ask', $pantry));
+
+        $response->assertOk();
+        $response->assertSee('Local');
+        $response->assertSee('Ollama');
+        $response->assertSee('qwen3-vl:8b-instruct');
+        $response->assertSee('Stays on this machine');
+        $response->assertSee('1 item in Pantry');
+        $response->assertSee('Eggs');
+        $response->assertDontSee('Empty Jar');
+    }
+
+    public function test_ask_page_warns_when_inventory_is_empty(): void
+    {
+        $user = User::factory()->create();
+        $pantry = Inventory::create(['user_id' => $user->id, 'name' => 'Pantry']);
+
+        $response = $this->actingAs($user)->get(route('inventories.ask', $pantry));
+
+        $response->assertOk();
+        $response->assertSee('This inventory is empty');
+        $response->assertSee('nothing in stock');
+    }
+
     public function test_ask_appends_inventory_context_to_prompt(): void
     {
         $user = User::factory()->create();
@@ -237,6 +383,14 @@ class InventoryFeatureTest extends TestCase
             'name' => 'Eggs',
             'normalized_name' => 'eggs',
             'quantity' => 6,
+            'unit' => 'pcs',
+        ]);
+
+        Item::create([
+            'inventory_id' => $pantry->id,
+            'name' => 'Empty Jar',
+            'normalized_name' => 'empty jar',
+            'quantity' => 0,
             'unit' => 'pcs',
         ]);
 
@@ -263,14 +417,49 @@ class InventoryFeatureTest extends TestCase
         $response->assertOk();
         $response->assertSee('What do I have?');
         $response->assertSee('You have eggs.');
+        $response->assertSee('Answer from Ollama');
+        $response->assertSee('qwen3-vl:8b-instruct');
 
         Http::assertSent(function ($request) {
             $content = $request['messages'][0]['content'] ?? '';
 
             return str_contains($content, 'Eggs')
                 && str_contains($content, 'What do I have?')
-                && ! str_contains($content, 'Secret Sauce');
+                && ! str_contains($content, 'Secret Sauce')
+                && ! str_contains($content, 'Empty Jar');
         });
+    }
+
+    public function test_ask_shows_friendly_error_without_raw_provider_body(): void
+    {
+        config([
+            'inventory.gemini.enabled' => false,
+            'inventory.ollama.base_url' => 'http://127.0.0.1:11434',
+            'inventory.ollama.model' => 'qwen3-vl:8b-instruct',
+            'inventory.ollama.timeout' => 5,
+            'inventory.ollama.num_ctx' => 8192,
+        ]);
+
+        Http::fake([
+            '*/api/chat' => Http::response(['error' => 'secret upstream detail'], 500),
+        ]);
+
+        $user = User::factory()->create();
+        $pantry = Inventory::create(['user_id' => $user->id, 'name' => 'Pantry']);
+
+        $response = $this->actingAs($user)
+            ->from(route('inventories.ask', $pantry))
+            ->post(route('inventories.ask.store', $pantry), [
+                'question' => 'What do I have?',
+            ]);
+
+        $response->assertRedirect(route('inventories.ask', $pantry));
+        $response->assertSessionHasErrors('question');
+        $this->assertSame(
+            "Couldn't reach the local model. Is Ollama running?",
+            session('errors')->first('question'),
+        );
+        $this->assertStringNotContainsString('secret upstream detail', session('errors')->first('question'));
     }
 
     public function test_inventory_pages_require_authentication(): void

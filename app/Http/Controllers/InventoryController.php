@@ -16,6 +16,7 @@ use App\Services\Inventory\InventoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Throwable;
 
 class InventoryController extends Controller
 {
@@ -26,15 +27,21 @@ class InventoryController extends Controller
         $request->session()->put('active_inventory_id', $inventory->id);
 
         $search = $request->string('search')->trim()->toString();
+        $existingOnly = $request->boolean('existing', true);
 
-        $items = $inventory->items()
+        $itemsQuery = $inventory->items()
             ->with('category')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($inner) use ($search) {
                     $inner->where('name', 'like', "%{$search}%")
                         ->orWhere('normalized_name', 'like', '%'.Item::normalizeName($search).'%');
                 });
-            })
+            });
+
+        $matchingItemCount = (clone $itemsQuery)->count();
+
+        $items = $itemsQuery
+            ->when($existingOnly, fn ($query) => $query->existing())
             ->orderBy('name')
             ->paginate(30)
             ->withQueryString();
@@ -43,6 +50,8 @@ class InventoryController extends Controller
             'inventory' => $inventory,
             'items' => $items,
             'search' => $search,
+            'existingOnly' => $existingOnly,
+            'matchingItemCount' => $matchingItemCount,
             'inventories' => $request->user()->inventories()->orderBy('name')->get(),
         ]);
     }
@@ -61,18 +70,13 @@ class InventoryController extends Controller
             ->with('status', 'Inventory created.');
     }
 
-    public function ask(Request $request, Inventory $inventory): View
+    public function ask(Request $request, Inventory $inventory, InventoryAskService $askService): View
     {
         $this->authorize('view', $inventory);
 
         $request->session()->put('active_inventory_id', $inventory->id);
 
-        return view('inventories.ask', [
-            'inventory' => $inventory,
-            'inventories' => $request->user()->inventories()->orderBy('name')->get(),
-            'question' => null,
-            'answer' => null,
-        ]);
+        return view('inventories.ask', $this->askViewData($request, $inventory, $askService));
     }
 
     public function askStore(
@@ -83,21 +87,46 @@ class InventoryController extends Controller
         $this->authorize('view', $inventory);
 
         $question = $request->string('question')->toString();
+        $inventoryContext = $askService->serializeInventory($inventory);
+        $itemCount = $askService->inStockItemCount($inventory);
 
         try {
-            $answer = $askService->ask($inventory, $question);
-        } catch (\Throwable $e) {
+            $answer = $askService->ask($inventory, $question, $inventoryContext);
+        } catch (Throwable $e) {
             return back()
                 ->withInput()
                 ->withErrors(['question' => $e->getMessage()]);
         }
 
-        return view('inventories.ask', [
+        return view('inventories.ask', $this->askViewData(
+            $request,
+            $inventory,
+            $askService,
+            $question,
+            $answer,
+            $inventoryContext,
+            $itemCount,
+        ));
+    }
+
+    private function askViewData(
+        Request $request,
+        Inventory $inventory,
+        InventoryAskService $askService,
+        ?string $question = null,
+        ?string $answer = null,
+        ?string $inventoryContext = null,
+        ?int $itemCount = null,
+    ): array {
+        return [
             'inventory' => $inventory,
             'inventories' => $request->user()->inventories()->orderBy('name')->get(),
+            'provider' => $askService->currentProvider(),
+            'inventoryContext' => $inventoryContext ?? $askService->serializeInventory($inventory),
+            'itemCount' => $itemCount ?? $askService->inStockItemCount($inventory),
             'question' => $question,
             'answer' => $answer,
-        ]);
+        ];
     }
 
     public function createItem(Request $request, Inventory $inventory): View

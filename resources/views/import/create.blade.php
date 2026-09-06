@@ -63,7 +63,6 @@
                     type="file"
                     name="image"
                     accept="image/*"
-                    capture="environment"
                     required
                     class="sr-only"
                     @change="onFile"
@@ -123,7 +122,7 @@
                         <p class="mt-1 text-xs text-stone-500">Usage today: {{ $geminiUsage }} / {{ $geminiLimit }}</p>
                         <form method="POST" action="{{ route('inventories.scan.gemini', $inventory) }}" enctype="multipart/form-data" class="mt-3 space-y-3" @submit="submitScan">
                             @csrf
-                            <input type="file" name="image" accept="image/*" capture="environment" required class="block w-full text-sm text-stone-500">
+                            <input type="file" name="image" accept="image/*" required class="block w-full text-sm text-stone-500">
                             <button type="submit" class="flex min-h-11 w-full items-center justify-center rounded-xl border border-stone-300 text-sm font-medium text-stone-700">
                                 Parse with Gemini
                             </button>

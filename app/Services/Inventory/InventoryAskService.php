@@ -2,15 +2,41 @@
 
 namespace App\Services\Inventory;
 
+use App\DTO\AskProvider;
 use App\Models\Inventory;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 class InventoryAskService
 {
+    public function currentProvider(): AskProvider
+    {
+        if ($this->usesGemini()) {
+            return new AskProvider(
+                vendor: 'Gemini',
+                model: (string) config('inventory.gemini.model'),
+                isLocal: false,
+            );
+        }
+
+        return new AskProvider(
+            vendor: 'Ollama',
+            model: (string) config('inventory.ollama.model'),
+            isLocal: true,
+        );
+    }
+
+    public function inStockItemCount(Inventory $inventory): int
+    {
+        return $inventory->items()->existing()->count();
+    }
+
     public function serializeInventory(Inventory $inventory): string
     {
         $items = $inventory->items()
+            ->existing()
             ->with('category')
             ->orderBy('name')
             ->get();
@@ -39,16 +65,32 @@ class InventoryAskService
         return implode("\n", $lines);
     }
 
-    public function ask(Inventory $inventory, string $question): string
+    public function ask(Inventory $inventory, string $question, ?string $inventoryContext = null): string
     {
-        $inventoryContext = $this->serializeInventory($inventory);
+        $provider = $this->currentProvider();
+        $inventoryContext ??= $this->serializeInventory($inventory);
         $prompt = $this->buildPrompt($question, $inventoryContext);
 
-        if (config('inventory.gemini.enabled') && config('inventory.gemini.api_key')) {
-            return $this->askGemini($prompt);
-        }
+        try {
+            if ($provider->isLocal) {
+                return $this->askOllama($prompt);
+            }
 
-        return $this->askOllama($prompt);
+            return $this->askGemini($prompt);
+        } catch (Throwable $e) {
+            Log::error('Inventory ask failed.', [
+                'provider' => $provider->vendor,
+                'model' => $provider->model,
+                'message' => $e->getMessage(),
+            ]);
+
+            throw new RuntimeException(
+                $provider->isLocal
+                    ? "Couldn't reach the local model. Is Ollama running?"
+                    : "Couldn't reach Gemini.",
+                previous: $e,
+            );
+        }
     }
 
     public function buildPrompt(string $question, string $inventoryContext): string
@@ -62,6 +104,11 @@ Inventory:
 Question:
 {$question}
 PROMPT;
+    }
+
+    private function usesGemini(): bool
+    {
+        return (bool) config('inventory.gemini.enabled') && (bool) config('inventory.gemini.api_key');
     }
 
     private function askOllama(string $prompt): string
