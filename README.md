@@ -50,6 +50,16 @@ php artisan user:create "Ada Lovelace" ada@example.com
 
 It prompts for a password. Then open [http://localhost:8000](http://localhost:8000), sign in, and go to **Import Receipt**. Self-serve `/register` still works if you want it.
 
+To try the app from a phone on the same Wi-Fi:
+
+```bash
+composer run dev:wifi
+```
+
+Composer does not accept `composer run dev --wifi` (`--wifi` is treated as a Composer flag). Equivalent: `composer run dev -- --wifi`.
+
+`composer run dev` stays on localhost. `dev:wifi` binds Laravel (`:8000`) and Vite (`:5173`) on `0.0.0.0`, points Vite HMR at this machine's LAN IP, and temporarily allows those two TCP ports from your `/24` in UFW when UFW is active (Omarchy denies incoming by default). Stop the process to remove the UFW rules. Open `http://<lan-ip>:8000` on the phone.
+
 If you skip `composer setup`:
 
 ```bash
@@ -78,6 +88,14 @@ docker compose exec app php artisan migrate --seed
 App: [http://localhost:8080](http://localhost:8080)
 
 Set `APP_URL=http://localhost:8080` in `.env`. Compose bind-mounts the project directory, so run `composer install` on the host (or inside the `app` container) if `vendor/` is missing.
+
+Compose already publishes `8080` on all interfaces. A phone on the LAN still needs the host firewall to allow it. On Omarchy, UFW denies incoming traffic and `ufw-docker` blocks published container ports:
+
+```bash
+sudo ufw allow from 192.168.0.0/16 to any port 8080 proto tcp comment 'inventory-dev-wifi'
+```
+
+Prefer `composer run dev:wifi` for phone testing; that stack is the Vite-backed one. Docker serves built assets (or the CDN fallback), not the Vite dev server.
 
 To call Ollama on the host from inside Docker:
 
