@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Inventory;
+use Illuminate\Database\Eloquent\Model;
 use App\Models\Item;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +24,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Model::preventLazyLoading(! app()->isProduction());
+
         Route::bind('inventory', function (string $value) {
             $user = auth()->user();
 
