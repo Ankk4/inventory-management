@@ -84,8 +84,6 @@ class InventoryController extends Controller
         Inventory $inventory,
         InventoryAskService $askService,
     ): View|RedirectResponse {
-        $this->authorize('view', $inventory);
-
         $question = $request->string('question')->toString();
         $inventoryContext = $askService->serializeInventory($inventory);
         $itemCount = $askService->inStockItemCount($inventory);
@@ -142,8 +140,6 @@ class InventoryController extends Controller
 
     public function storeItem(StoreItemRequest $request, Inventory $inventory): RedirectResponse
     {
-        $this->authorize('view', $inventory);
-
         Item::create([
             'inventory_id' => $inventory->id,
             'name' => $request->string('name')->toString(),
@@ -192,7 +188,6 @@ class InventoryController extends Controller
         Inventory $inventory,
         Item $item,
     ): RedirectResponse {
-        $this->authorize('view', $inventory);
         $this->ensureItemBelongsToInventory($inventory, $item);
 
         $name = $request->string('name')->toString();
@@ -216,7 +211,6 @@ class InventoryController extends Controller
         Inventory $inventory,
         Item $item,
     ): RedirectResponse {
-        $this->authorize('view', $inventory);
         $this->ensureItemBelongsToInventory($inventory, $item);
 
         $delta = (float) $request->input('delta');

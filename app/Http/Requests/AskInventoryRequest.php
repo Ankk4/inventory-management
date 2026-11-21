@@ -8,7 +8,7 @@ class AskInventoryRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()->can('view', $this->route('inventory'));
     }
 
     public function rules(): array

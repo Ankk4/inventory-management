@@ -44,8 +44,6 @@ class ReceiptImportController extends Controller
         ReceiptImportService $importService,
         ItemMatcher $matcher,
     ): View|RedirectResponse {
-        $this->authorize('view', $inventory);
-
         try {
             $imagePath = $request->file('image')
                 ? $importService->storeImage($request->file('image'))
@@ -68,8 +66,6 @@ class ReceiptImportController extends Controller
         ReceiptImportService $importService,
         ItemMatcher $matcher,
     ): View|RedirectResponse {
-        $this->authorize('view', $inventory);
-
         try {
             $imagePath = $importService->storeImage($request->file('image'));
 
@@ -90,8 +86,6 @@ class ReceiptImportController extends Controller
         ReceiptImportService $importService,
         ItemMatcher $matcher,
     ): View|RedirectResponse {
-        $this->authorize('view', $inventory);
-
         try {
             $imagePath = $importService->storeImage($request->file('image'));
 
@@ -110,8 +104,6 @@ class ReceiptImportController extends Controller
         Inventory $inventory,
         ReceiptImportService $importService,
     ): RedirectResponse {
-        $this->authorize('view', $inventory);
-
         $payload = $request->validated();
         $payload['raw_payload'] = $payload;
 

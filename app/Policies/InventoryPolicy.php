@@ -7,6 +7,11 @@ use App\Models\User;
 
 class InventoryPolicy
 {
+    public function create(User $user): bool
+    {
+        return true;
+    }
+
     public function view(User $user, Inventory $inventory): bool
     {
         return $inventory->user_id === $user->id;

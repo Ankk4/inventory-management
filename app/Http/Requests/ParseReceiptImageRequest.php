@@ -8,7 +8,7 @@ class ParseReceiptImageRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()->can('update', $this->route('inventory'));
     }
 
     public function rules(): array
